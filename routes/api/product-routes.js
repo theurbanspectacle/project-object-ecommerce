@@ -40,6 +40,7 @@ router.get('/:id', (req, res) => {
 
 // create new product
 router.post('/', (req, res) => {
+  productId = '';
   /* req.body should look like this...
     {
       product_name: "Basketball",
@@ -50,6 +51,7 @@ router.post('/', (req, res) => {
   */
   Product.create(req.body)
     .then((product) => {
+      productId = product.id;
       // if there's product tags, we need to create pairings to bulk create in the ProductTag model
       if (req.body.tagIds.length) {
         const productTagIdArr = req.body.tagIds.map((tag_id) => {
@@ -63,7 +65,21 @@ router.post('/', (req, res) => {
       // if no product tags, just respond
       res.status(200).json(product);
     })
-    .then((productTagIds) => res.status(200).json(productTagIds))
+    .then(() => {
+      Product.findOne({
+        include: [
+          Category,
+          Tag,
+        ],
+        where: {
+          id: productId,
+        },
+      }).then((response) => {
+        res.json(response);
+      }).catch((error) => {
+        res.status(500).json(error);
+      });
+    })
     .catch((err) => {
       console.log(err);
       res.status(400).json(err);
@@ -86,8 +102,8 @@ router.put('/:id', (req, res) => {
       // get list of current tag_ids
       const productTagIds = productTags.map(({ tag_id }) => tag_id);
       // create filtered list of new tag_ids
-      const newProductTags = req.body.tagIds
-        .filter((tag_id) => !productTagIds.includes(tag_id))
+      const newProductTags = (req.body.tagIds || [])
+        .filter((tag_id) => !((productTagIds || []).includes(tag_id)))
         .map((tag_id) => {
           return {
             product_id: req.params.id,
@@ -95,8 +111,8 @@ router.put('/:id', (req, res) => {
           };
         });
       // figure out which ones to remove
-      const productTagsToRemove = productTags
-        .filter(({ tag_id }) => !req.body.tagIds.includes(tag_id))
+      const productTagsToRemove = (productTags || [])
+        .filter(({ tag_id }) => !((req.body.tagIds || []).includes(tag_id)))
         .map(({ id }) => id);
 
       // run both actions
@@ -105,9 +121,9 @@ router.put('/:id', (req, res) => {
         ProductTag.bulkCreate(newProductTags),
       ]);
     })
-    .then((updatedProductTags) => res.json(updatedProductTags))
+    .then(() => res.send(''))
     .catch((err) => {
-      // console.log(err);
+      console.log(err);
       res.status(400).json(err);
     });
 });
